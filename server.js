@@ -23,7 +23,20 @@ const MAX_BUFFER = 600;
 
 let lib = null;
 function loadLib() {
-  if (!lib) lib = require('tiktok-live-connector');
+  if (!lib) {
+    lib = require('tiktok-live-connector');
+    // Euler Stream imza anahtarı: hem yeni (v2) hem eski (v1) sürüm için ayarla
+    if (SIGN_API_KEY) {
+      try { if (lib.SignConfig) lib.SignConfig.apiKey = SIGN_API_KEY; } catch (_) {}
+      try {
+        const sp = lib.signatureProvider;
+        if (sp && sp.config) {
+          sp.config.extraParams = sp.config.extraParams || {};
+          sp.config.extraParams.apiKey = SIGN_API_KEY;
+        }
+      } catch (_) {}
+    }
+  }
   return lib;
 }
 
@@ -75,9 +88,7 @@ function makeRoom(username) {
     if (room.closed) return;
     const { TikTokLiveConnection, WebcastPushConnection } = loadLib();
     const Connection = TikTokLiveConnection || WebcastPushConnection;
-    const options = SIGN_API_KEY
-      ? { signApiKey: SIGN_API_KEY, signProviderOptions: { params: { apiKey: SIGN_API_KEY } } }
-      : {};
+    const options = SIGN_API_KEY ? { signApiKey: SIGN_API_KEY } : {};
     const conn = new Connection(username, options);
     room.conn = conn;
     room.status = 'baglaniyor';
@@ -128,6 +139,13 @@ function makeRoom(username) {
       })
       .catch((err) => {
         const msg = String((err && (err.message || err.info)) || err);
+        if (/sign/i.test(msg) && /40[13]|429/.test(msg)) {
+          room.status = 'imza';
+          room.error = SIGN_API_KEY ? 'İmza servisi anahtarı reddetti veya kota doldu' : 'İmza servisi anahtar istiyor (SIGN_API_KEY)';
+          console.log(`❌ @${username}: ${msg}`);
+          scheduleRetry();
+          return;
+        }
         room.status = /offline|not.*live|LIVE has ended|isn't online/i.test(msg) ? 'yayin_yok' : 'hata';
         room.error = cut(msg, 140);
         console.log(`❌ @${username}: ${room.error}`);
