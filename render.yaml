@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: halay-aktarici
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: RELAY_KEY
+        generateValue: true
+      - key: SIGN_API_KEY
+        sync: false
